@@ -11,47 +11,163 @@ from ontology import Ontology
 from itertools import chain
 import pygame
 import glo
+import heapq
 
 import random 
 import numpy as np
 import sys
 
-
-
+class Node():
     
+    def __init__(self, coord, g, father):
+        self.x = coord[0]
+        self.y = coord[1]
+        self.g=g
+        self.father=father
+        
+    def expand(self, p):
+        l=[]
+        for i in [(0,1),(1,0),(0,-1),(-1,0)]:
+            if(p.notWall((self.x+i[0],self.y+i[1]))):
+                l.append(Node((self.x+i[0], self.y+i[1]), self.g+1, self))
+        return l
+    
+    def backWay(self):
+        actions=[]
+        way=[]
+        while(self.father!=None):#Tant que je ne suis pas la racine
+            actions.insert(0, (self.x-self.father.x, self.y-self.father.y))
+            way.insert(0, (self.x, self.y))
+            self=self.father
+        return actions, way
+    
+    def __lt__(self, other):
+        return True
+    
+    def __str__(self):
+        return "("+str(self.x)+","+str(self.y)+")"
+    
+
+class Problem():
+    
+    def __init__(self, init, goal, wallStates, hauteur=20, largeur=20):
+        self.init=init
+        self.goal = goal
+        self.wallStates=wallStates
+        self.hauteur=hauteur
+        self.largeur=largeur
+        
+    def isGoal(self, pos):
+        return pos==self.goal
+    
+    def notWall(self, pos):
+        return pos[0]>=0 and pos[0]<self.largeur and pos[1]>=0 and pos[1]<self.hauteur and pos not in self.wallStates
+  
+    
+def heuristique(coord, goal):
+        return abs(coord[0]-goal[0])+abs(coord[1]-goal[1])
+    
+def astar(p):
+    nodeInit = Node(p.init,0,None)
+    frontiere = [(nodeInit.g+heuristique((nodeInit.x, nodeInit.y),p.goal),nodeInit)] 
+    reserve = {}        
+    bestNoeud = nodeInit
+    
+    while frontiere != [] and not p.isGoal((bestNoeud.x, bestNoeud.y)):
+        
+        (min_f,bestNoeud) = heapq.heappop(frontiere)         
+    # Suppose qu'un noeud en réserve n'est jamais ré-étendu 
+    # Hypothèse de consistence de l'heuristique
+    # ne gère pas les duplicatas dans la frontière
+    
+        if (bestNoeud.x, bestNoeud.y) not in reserve:            
+            reserve[(bestNoeud.x, bestNoeud.y)] = bestNoeud.g #maj de reserve
+            nouveauxNoeuds = bestNoeud.expand(p)            
+            for n in nouveauxNoeuds:
+                f = n.g+heuristique((n.x, n.y),p.goal)
+                heapq.heappush(frontiere, (f,n))       
+                
+    # Afficher le résultat                 
+    if(not p.isGoal((bestNoeud.x, bestNoeud.y))):
+        return False , False
+    else:
+        return bestNoeud.backWay()
+    
+
+def printFrontiere(frontiere):
+    st="["
+    for e in frontiere:
+        f,n=e
+        st+="("+str(f)+","+str(n)+")"
+    st+="]"
+    return st
+
+
+def nearestGoal(coord,liste):
+    nearest = 10000
+    idNear = -1
+    for i in range(len(liste)):
+        h = heuristique(coord, liste[i])
+        if h < nearest :
+            idNear = i
+            nearest = h
+    if idNear > -1:
+        return liste[idNear]
+    else:
+        return -1
+    
+def nearestDispo(coord, listeFioles, listeGoals):
+    goalsDispo = listeFioles[:]
+    for i in range(len(listeGoals)):
+        if listeGoals[i] in  goalsDispo:
+            goalsDispo.remove(listeGoals[i])
+    goal = nearestGoal(coord, goalsDispo)
+    if goal != -1:    
+        return goal
+    else:
+        return -1
+    
+def randDispo(coord, listeFioles, listeGoals):
+    done = []
+    while len(done)<len(listeFioles):
+        x = random.randint(0,len(listeFioles)-1)
+        if x not in done :
+            done.append(x)
+            if listeFioles[x] not in listeGoals:
+                return listeFioles[x]
+    return -1
+
 # ---- ---- ---- ---- ---- ----
 # ---- Main                ----
 # ---- ---- ---- ---- ---- ----
-
+  
+    
 game = Game()
 
 def init(_boardname=None):
-    global player,game
+    global player,game, tailleV, tailleH
     # pathfindingWorld_MultiPlayer4
     name = _boardname if _boardname is not None else 'match'
     game = Game('Cartes/' + name + '.json', SpriteBuilder)
     game.O = Ontology(True, 'SpriteSheet-32x32/tiny_spritesheet_ontology.csv')
     game.populate_sprite_names(game.O)
-    game.fps = 5  # frames per second
+    game.fps = 20  # frames per second
     game.mainiteration()
     game.mask.allow_overlaping_players = True
-    #player = game.player
+    tailleV = game.spriteBuilder.rowsize
+    tailleH = game.spriteBuilder.colsize
     
 def main():
 
     #for arg in sys.argv:
-    iterations = 50 # default
+    iterations = 100 # default
     if len(sys.argv) == 2:
         iterations = int(sys.argv[1])
     print ("Iterations: ")
     print (iterations)
 
-    init()
-    
-    
-    
+    init("pathfindingWorld_MultiPlayer4")
 
-    
     #-------------------------------
     # Initialisation
     #-------------------------------
@@ -60,99 +176,102 @@ def main():
     nbPlayers = len(players)
     score = [0]*nbPlayers
     
-    
     # on localise tous les états initiaux (loc du joueur)
     initStates = [o.get_rowcol() for o in game.layers['joueur']]
     print ("Init states:", initStates)
-    
-    
-    # on localise tous les objets ramassables
-    goalStates = [o.get_rowcol() for o in game.layers['ramassable']]
-    print ("Goal states:", goalStates)
         
     # on localise tous les murs
     wallStates = [w.get_rowcol() for w in game.layers['obstacle']]
-    #print ("Wall states:", wallStates)
     
     #-------------------------------
     # Placement aleatoire des fioles de couleur 
     #-------------------------------
-    
+    goalStates = []
     for o in game.layers['ramassable']: # les rouges puis jaunes puis bleues
     # et on met la fiole qqpart au hasard
         x = random.randint(1,19)
         y = random.randint(1,19)
-        while (x,y) in wallStates:
+        while (x,y) in wallStates or (x,y) in goalStates:
             x = random.randint(1,19)
             y = random.randint(1,19)
         o.set_rowcol(x,y)
+        goalStates.append((x,y))
         game.layers['ramassable'].add(o)
         game.mainiteration()                
 
     print(game.layers['ramassable'])
-
-
-    
-    
+    print ("Goal states:", goalStates)
+ 
     #-------------------------------
     # Boucle principale de déplacements 
     #-------------------------------
-    
-        
-    # bon ici on fait juste plusieurs random walker pour exemple...
-    
+    etapeTrajet = []#on stoque l'itération en cours du trajet de chaque joueur
     posPlayers = initStates
-
+    trajetPlayers = []
+    goalsPlayer = []#liste des coordonnées du but de chaque joueur
+    for k in range(nbPlayers):
+        etapeTrajet.append(0)
+        #goalK = nearestGoal(posPlayers[k],goalStates) #basé sur la fiole la plus proche de chacun
+        goalK = randDispo(posPlayers[k], goalStates, goalsPlayer)#pour pas que 2 aient la même fiole
+        goalsPlayer.append(goalK)
+        prob = Problem(posPlayers[k],goalK, wallStates, hauteur=20, largeur=20)
+        trajet, way = astar(prob)
+        print ("Trajet OK pour le joueur ", k)
+        trajetPlayers.append(trajet)#on sauvegarde le trajet prévu
+        #on cherche un trajet initial, on regardera après s'il y a des croisements
+    
+    listFinish = []
     for i in range(iterations):
-        
+        if len(listFinish)==nbPlayers :
+            print("iterations:",  i)
+            break
         for j in range(nbPlayers): # on fait bouger chaque joueur séquentiellement
-            row,col = posPlayers[j]
+            if j not in listFinish:
+                row,col = posPlayers[j]
+                if (row,col) == goalsPlayer[j] and goalsPlayer[j] in goalStates:# si on a  trouvé la fiole voulue, on la ramasse
+                    print ("Objet trouvé par le joueur ", j)
+                    o = players[j].ramasse(game.layers)
+                    game.mainiteration()
+                    goalStates.remove((row,col)) # on enlève ce goalState de la liste
+                    score[j]+=1
+                    listFinish.append(j)
+                else:
+                    #on effectue le mouvement suivant s'il n'y a pas de joueur qui nous en empêche (sur la case destination)
+                    if(len(trajetPlayers[j])>etapeTrajet[j]):
+                        x_inc,y_inc = trajetPlayers[j][etapeTrajet[j]]   
+                        etapeTrajet[j] = etapeTrajet[j]+1
+                        next_row = row+x_inc
+                        next_col = col+y_inc
+                        notMoved = True
+                        while(notMoved):#on actualise le chemin si besoin jusqu'à pouvoir faire un mouvement valide :  ESQUIVE DES JOUEURS
+                            if ((next_row,next_col) not in wallStates) and ((next_row,next_col) not in posPlayers) and next_row>=0 and next_row<=19 and next_col>=0 and next_col<=19:
+                                players[j].set_rowcol(next_row,next_col)
+                                game.mainiteration()
+                                posPlayers[j]=(next_row,next_col)
+                                notMoved = False
+                            else:
+                                #si il y a un joueur sur la case, on cherche un autre itinéraire:
+                                #on relance A étoile en considérant cette case comme un obstacle
+                                print ("Obstacle pos:",next_row,next_col)
+                                tempWallStates = wallStates[:]
+                                tempWallStates.append((next_row,next_col))
+                                prob = Problem(posPlayers[j],goalsPlayer[j], tempWallStates, hauteur=20, largeur=20)
+                                trajet, way = astar(prob)
+                                if trajet!=False and way != False:
+                                    #on remplace l'ancien trajet par le nouveau
+                                    trajetPlayers[j] = trajet  #on supprime l'ancien trajet
+                                    etapeTrajet[j] = 0 #on place le curseur au début du nouveau trajet
+                                    x_inc,y_inc = trajetPlayers[j][etapeTrajet[j]]   #on prépare le 1er déplacement
+                                    etapeTrajet[j] = etapeTrajet[j]+1        
+                                    next_row = row+x_inc
+                                    next_col = col+y_inc
+                    else:
+                        print ("trajet de "+str(j)+ "terminé")
+                        listFinish.append(j)
 
-            x_inc,y_inc = random.choice([(0,1),(0,-1),(1,0),(-1,0)])
-            next_row = row+x_inc
-            next_col = col+y_inc
-            # and ((next_row,next_col) not in posPlayers)
-            if ((next_row,next_col) not in wallStates) and next_row>=0 and next_row<=19 and next_col>=0 and next_col<=19:
-                players[j].set_rowcol(next_row,next_col)
-                print ("pos :", j, next_row,next_col)
-                game.mainiteration()
-    
-                col=next_col
-                row=next_row
-                posPlayers[j]=(row,col)
-            
-      
-        
-            
-            # si on a  trouvé un objet on le ramasse
-            if (row,col) in goalStates:
-                o = players[j].ramasse(game.layers)
-                game.mainiteration()
-                print ("Objet trouvé par le joueur ", j)
-                goalStates.remove((row,col)) # on enlève ce goalState de la liste
-                score[j]+=1
-                
-        
-                # et on remet un même objet à un autre endroit
-                x = random.randint(1,19)
-                y = random.randint(1,19)
-                while (x,y) in wallStates:
-                    x = random.randint(1,19)
-                    y = random.randint(1,19)
-                o.set_rowcol(x,y)
-                goalStates.append((x,y)) # on ajoute ce nouveau goalState
-                game.layers['ramassable'].add(o)
-                game.mainiteration()                
-                
-                break
-            
-    
     print ("scores:", score)
     pygame.quit()
-    
-        
-    
-   
+
 
 if __name__ == '__main__':
     main()

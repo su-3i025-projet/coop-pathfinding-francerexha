@@ -23,162 +23,103 @@ import sys
 # ---- ---- ---- ---- ---- ----
 
 
-def AETOILE(coordDepart, coordBut, grille): #coord format: [ligne, colonne]
-    #on récupère les positions de départ et de but :
-    posX = coordDepart[0]
-    posY= coordDepart[1]
-    butX= coordBut[0]
-    butY= coordBut[1]
-    print(butX)
-    print(butY)
+class Node():
     
-    # on créé le noeud racine, où on se trouve au début du problème :
-    h =  heuristique(coordDepart, coordBut)
-    noeudRacine = {'posX':posX,'posY':posY,'imat_provenance':0,'g':0,'h':h,'immatriculation':0}#on ne met plus la grille dans les noeuds (trop lourd), on stoque l'imatriculation du parent à la place et on remontera tout depuis le but pour trouver le chemin
-    imatNb = 1#nombre de noeuds, détermine l'immatriculation des noeuds
-    #on initialise la frontière : (indexée 'clé | valeur' = f | noeud)
-    # frontiere = [(h,noeudRacine)]  #PB DUPLICATION car f égaux multiples en clée
-    noeudsOuverts = [noeudRacine]
-    #on initialise la liste des noeuds déjà traités :
-    noeudsFermes = []
-   # print(str(posX)+" : "+str(posY))
-   # print(str(butX)+" : "+str(butY))
-    #on boucle tant qu'on a pas épuisé toutes les possibilités
-    while noeudsOuverts != []:              
-        #  (currH,currNoeud) = heapq.heappop(frontiere)#on récupère le plus proche élément de la frontière  
-        (currNoeud, noeudsOuverts) = depilerPlusPetit(noeudsOuverts)#on dépile l'élément d eplus petit f du tableau, équivalent à l'ancienne frontière mais pas de pb de duplication du coup !
-        #print(noeudsOuverts)
-        #print(currNoeud)
-        #grille[currNoeud.get('posX')][currNoeud.get('posY')] = 'X'
-        #print(grille)
-        if currNoeud.get('posX')==butX and currNoeud.get('posY')==butY:#si on a atteint le but :
-            print("but atteint")
-           # print(currNoeud)
-            (chemin, listeChemin) = tracerChemin(grille, noeudsOuverts, noeudsFermes, currNoeud)#on trace le chemin en remontant les noeuds de provenance
-            return (chemin, listeChemin) #terminaison du programme
-        #sinon:
-        (nouveauxNoeuds, imatNb) = voisins(currNoeud, coordBut, imatNb, grille)#on récupère les noeuds fils explorables et le nouveau nombre de noeuds
-       # print(nouveauxNoeuds)
-        for noeud in nouveauxNoeuds:
-            if existeAvecCoutInf(noeud, noeudsFermes)==1 or existeAvecCoutInf(noeud, noeudsOuverts)==1:#si ouvert ou fermé avec cout moindre
-                #ne rien faire
-                continue
-                #print("noeud inintéressant")#un message au hasard juste pour respecter l'identation python ^^
-            else:#sinon
-                #f = noeud.get('g')+noeud.get('h')
-                #heapq.heappush(frontiere, (f,noeud)))# PB dans la frontière (problème de duplication comme f identiques)
-                noeudsOuverts.append(noeud)#pas de pb de duplication mais pas de tri sur f
-        noeudsFermes.append(currNoeud)#on ferme le noeud courrant pour le moment
-    return 1 #terminaison du programme
-                
-def tracerChemin(grille, noeudsOuverts, noeudsFermes, noeudFinal):
-    listeChemin = []
-    noeud = noeudFinal
-    precedent = noeud.get('imat_provenance')
-    print("tracer chemin:")
-    print(noeud)
-    print(precedent)
-    while precedent != -1 :
-        grille[noeud.get('posX')][noeud.get('posY')] = 'C'
-        oldX = noeud.get('posX')
-        oldY = noeud.get('posY')
-        if chercherNoeud(precedent, noeudsOuverts)!=0 :
-            noeud = chercherNoeud(precedent, noeudsOuverts)
-            precedent = noeud.get('imat_provenance')
-        else:
-            if chercherNoeud(precedent, noeudsFermes)!=0 :
-                noeud = chercherNoeud(precedent, noeudsFermes)
-                precedent = noeud.get('imat_provenance')
-            else:
-                precedent = -1
-        newX = noeud.get('posX')
-        newY = noeud.get('posY')
-        if newX!=oldX or newY!=oldY :
-            deplacementCol= oldY-newY
-            deplacementLign = oldX-newX
-            #listeChemin.append((deplacementCol,deplacementLign))
-            listeChemin.insert(0,(deplacementLign,deplacementCol))
-        else :
-            return (grille, listeChemin)
-    return (grille, listeChemin)
+    def __init__(self, coord, g, father):
+        self.x = coord[0]
+        self.y = coord[1]
+        self.g=g
+        self.father=father
+        
+    def expand(self, p):
+        """retourne l'ensemble des noeuds fils"""
+        l=[]
+        for i in [(0,1),(1,0),(0,-1),(-1,0)]:
+            if(p.notWall((self.x+i[0],self.y+i[1]))):
+                l.append(Node((self.x+i[0], self.y+i[1]), self.g+1, self))
+        return l
     
-def chercherNoeud(imat, tableau):
-    for noeud in tableau:
-        if noeud.get('immatriculation')==imat:
-            return noeud
-    return 0
-           
-def depilerPlusPetit(tableau):
-    min = 10000000 #valur au hasard très grande, pour être sur que n'importe quel valeur de f sera plus petite !
-    minNode = 0
-    for noeud in tableau:#on récupère le noeud de plus petit f
-        f = noeud.get('g')+noeud.get('h')
-        if f < min :
-            min = f
-            minNode = noeud
-    tableau.remove(minNode)
-    return (minNode, tableau) #on 'dépile' l'élément du tableau et on le retourne, on retourne le tableau modifié dans le doute (pas sûr que ce soit du passage de référence en paramètre pour les tableaux)
+    def backWay(self):
+        """
+        Retourne la liste des couples d'actions à effectuer dans l'ordre depuis le départ
+        """
+        actions=[]
+        way=[]
+        while(self.father!=None):#Tant que je ne suis pas la racine
+            actions.insert(0, (self.x-self.father.x, self.y-self.father.y))
+            way.insert(0, (self.x, self.y))
+            self=self.father
+        
+        """
+        while(self.father!=None):#Tant que je ne suis pas la racine
+            l.insert(0, self.etat)
+            self=self.father
+        """
+        return actions, way
     
-def getIndice(noeudVoulu, tableau):# au cas où ça sert
-    for i in range(len(tableau)):
-        if tableau[i].get('immatriculation') == noeudVoulu.get('immatriculation'):
-            return i
-    return -1
+    def __lt__(self, other):
+        return True
     
-def existeAvecCoutInf(noeud, tableau):
-    for i in range(len(tableau)):
-        if tableau[i].get('posX') == noeud.get('posX') and tableau[i].get('posY') == noeud.get('posY'):
-            if tableau[i].get('g') < noeud.get('g'):
-                return 1
-    return -1
+    def __str__(self):
+        return "("+str(self.x)+","+str(self.y)+")"
     
-def heuristique(coord, but):
-    return abs(coord[0]-but[0])+abs(coord[1]-but[1])
-    
-    
-def voisins(noeud, coordBut, imatCount, grille):
-    tailleV = len(grille)#taille verticale de la grille (nombre de lignes), vérifier que c'est bien les bonnes dimensions (pas inversées !)
-    tailleH = len(grille[0])#taille horizontale de la grille(nombre de colonnes)
-    butX= coordBut[0]
-    butY = coordBut[1]
-    posX= noeud.get('posX')
-    posY=noeud.get('posY')
-    nouveauxNoeuds = []
-    g = noeud.get('g')
-    imat_prov = noeud.get('immatriculation')
-    #case du haut :
-    if(posX>0 and (grille[posX-1][posY]==' ' or (posX-1==butX and posY==butY))):
-        #case explorable
-        h = heuristique([posX-1,posY], coordBut)+g+1 #l'heuristique du noeud vaut le coût du parent plus la distance au but
-        caseHaut = {'posX':posX-1,'posY':posY, 'imat_provenance':imat_prov,'g':g+1, 'h':h,'immatriculation':imatCount}
-        imatCount= imatCount+1
-        nouveauxNoeuds.append(caseHaut)
-    if(posX<tailleV-1 and (grille[posX+1][posY]==' ' or (posX+1==butX and posY==butY))):
-        #case explorable
-        h = heuristique([posX+1,posY], coordBut)+g+1
-        caseBas = {'posX':posX+1,'posY':posY,'imat_provenance':imat_prov,'g':g+1,'h':h,'immatriculation':imatCount}
-        imatCount= imatCount+1
-        nouveauxNoeuds.append(caseBas)
-    if(posY>0 and (grille[posX][posY-1]==' ' or (posX==butX and posY-1==butY))):
-        #case explorable
-        h = heuristique([posX,posY-1], coordBut)+g+1
-        caseGauche = {'posX':posX,'posY':posY-1, 'imat_provenance':imat_prov,'g':g+1,'h':h,'immatriculation':imatCount}
-        imatCount= imatCount+1
-        nouveauxNoeuds.append(caseGauche)
-    if(posY<tailleH-1 and (grille[posX][posY+1]==' ' or (posX==butX and posY+1==butY))):
-        #case explorable
-        h = heuristique([posX,posY+1], coordBut)+g+1
-        caseDroite = {'posX':posX,'posY':posY+1, 'imat_provenance':imat_prov,'g':g+1,'h':h,'immatriculation':imatCount}
-        imatCount= imatCount+1
-        nouveauxNoeuds.append(caseDroite)
-    return (nouveauxNoeuds, imatCount)
 
-#
-#grille = [[' ','#',' ',' ',' ',' '],[' ','#',' ',' ',' ',' '],[' ',' ',' ',' ','#',' '],['#','#','#',' ','#',' '],[' ','#','#',' ','#',' '],[' ',' ',' ',' ','#',' ']]
-#print(grille)
-#(chemin, listeChemin) = AETOILE([0,0], [5,0], grille)
-#print(chemin)
-#print (listeChemin)
+class Problem():
+    
+    def __init__(self, init, goal, wallStates, hauteur=20, largeur=20):
+        """
+        depart et but son des couples (coordonnées)
+        """
+        self.init=init
+        self.goal = goal
+        self.wallStates=wallStates
+        self.hauteur=hauteur
+        self.largeur=largeur
+        
+    def isGoal(self, pos):
+        return pos==self.goal
+    
+    def notWall(self, pos):
+        return pos[0]>=0 and pos[0]<self.largeur and pos[1]>=0 and pos[1]<self.hauteur and pos not in self.wallStates
+  
+def heuristique(coord, goal):
+        return abs(coord[0]-goal[0])+abs(coord[1]-goal[1])
+
+def astar(p):
+    nodeInit = Node(p.init,0,None)
+    frontiere = [(nodeInit.g+heuristique((nodeInit.x, nodeInit.y),p.goal),nodeInit)] 
+    reserve = {}        
+    bestNoeud = nodeInit
+    
+    while frontiere != [] and not p.isGoal((bestNoeud.x, bestNoeud.y)):
+        
+        (min_f,bestNoeud) = heapq.heappop(frontiere)         
+    # Suppose qu'un noeud en réserve n'est jamais ré-étendu 
+    # Hypothèse de consistence de l'heuristique
+    # ne gère pas les duplicatas dans la frontière
+    
+        if (bestNoeud.x, bestNoeud.y) not in reserve:            
+            reserve[(bestNoeud.x, bestNoeud.y)] = bestNoeud.g #maj de reserve
+            nouveauxNoeuds = bestNoeud.expand(p)            
+            for n in nouveauxNoeuds:
+                f = n.g+heuristique((n.x, n.y),p.goal)
+                heapq.heappush(frontiere, (f,n))       
+                
+    # Afficher le résultat                 
+    if(not p.isGoal((bestNoeud.x, bestNoeud.y))):
+        return False
+    else:
+        return bestNoeud.backWay()
+    
+
+def printFrontiere(frontiere):
+    st="["
+    for e in frontiere:
+        f,n=e
+        st+="("+str(f)+","+str(n)+")"
+    st+="]"
+    return st
+
 
 
 
@@ -231,43 +172,24 @@ def main():
     wallStates = [w.get_rowcol() for w in game.layers['obstacle']]
     #print ("Wall states:", wallStates)
     
-    #on créé une grille vide :
-    grille = []
-    for i in range(tailleV):
-        ligne = []
-        for j in range(tailleH):
-            ligne.append(' ')
-        grille.append(ligne)
-   
-    
-    #on ajoute les obstacles :
-    
-    for i in range(len(wallStates)):
-        x= wallStates[i][0]
-        y = wallStates[i][1]
-        grille[x][y]='#'
-    
-    print(grille)
     #-------------------------------
     # Building the best path with A*
     #-------------------------------
     # print(initStates)
-    (chemin, liste) = AETOILE(initStates[0], goalStates[0], grille)
-    print(chemin)
-    print(liste)
+    prob = Problem(initStates[0],goalStates[0], wallStates, hauteur=20, largeur=20)
+    actions, way = astar(prob)
+    print(actions)
+    print(way)
    
     #-------------------------------
     # Moving along the path
     #-------------------------------
-        
-    # bon ici on fait juste un random walker pour exemple...
-    
-
+       
     row,col = initStates[0]
     #row2,col2 = (5,5)
 
-    for i in range(len(liste)):
-        x_inc,y_inc = liste[i]# A*
+    for i in range(len(actions)):
+        x_inc,y_inc = actions[i]# A*
         next_row = row+x_inc
         next_col = col+y_inc
         if ((next_row,next_col) not in wallStates) and next_row>=0 and next_row<=20 and next_col>=0 and next_col<=20:
@@ -277,10 +199,7 @@ def main():
 
             col=next_col
             row=next_row
-
-            
-        
-            
+     
         # si on a  trouvé l'objet on le ramasse
         if (row,col)==goalStates[0]:
             o = game.player.ramasse(game.layers)
@@ -291,7 +210,6 @@ def main():
         #x,y = game.player.get_pos()
     
         '''
-    
     pygame.quit()
     
         
